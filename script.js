@@ -1,4 +1,3 @@
-let b = 7
 let z = +prompt("Перше число");
 
 for (let i = 1 ; i == 1;){
