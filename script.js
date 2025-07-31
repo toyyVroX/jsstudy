@@ -1,74 +1,103 @@
-class DragAndDrop {
+class FormsValidation{
     selectors = {
-        root: '[data-js-dnd]'
+        form: '[data-js-form]',
+        fieldErrors: '[data-js-form-field-errors]',
     }
 
-    stateClasses = {
-        isDragging: 'is-dragging',
-    }
-
-    initialState = {
-        offsetX: null,
-        offsetY: null,
-        isDragging: false,
-        currentDraggingElement: null,
+    errorMessages = {
+        valueMissing: () => 'Поалуста заповніть це поле',
+        patternMismatch: ({ title }) => title || 'Що по формату тіп',
+        tooShort: ({minLength}) => `Занадто длінно, надо символів ${minLength}`,
+        tooLong: ({maxLength}) => `Занадто міні, надо символів ${maxLength}`,
     }
 
     constructor() {
-        this.state = {...this.initialState}
         this.bindEvents()
     }
 
-    resetState() {
-        this.state = {...this.initialState}
+    manageErrors(fieldControlElement, errorMessages) {
+        const fieldErrorsElement = fieldControlElement.parentElement.querySelector(this.selectors.fieldErrors)
+
+        fieldErrorsElement.innerHTML = errorMessages
+        .map((message) => `<span class="field__error">${message}</span>`)
+        .join('')
     }
 
-    onPointerDown(event) {
-        const { target, x, y } = event
-        const isDraggable = target.matches(this.selectors.root)
+    validateField(fieldControlElement) {
+        const errors = fieldControlElement.validity
+        const errorMessages = []
+
+        Object.entries(this.errorMessages).forEach(([errorType, getErrorMessage]) => {
+            if (errors[errorType]) {
+                errorMessages.push(getErrorMessage(fieldControlElement))
+            }
+        })
+
+
+        this.manageErrors(fieldControlElement, errorMessages)
+
+        const isValid = errorMessages.length === 0
+
+        fieldControlElement.ariaInvalid = !isValid
+
+        return isValid
+    }
+
+    onBlur(event) {
+        const { target } = event
+        const isFormField = target.closest(this.selectors.form)
+        const isRequired = target.required
         
-        if (!isDraggable) {
-            return
-        }
-
-        target.classList.add(this.stateClasses.isDragging)
-
-        const { left, top } = target.getBoundingClientRect()
-
-        this.state = {
-            offsetX: x - left,
-            offsetY: y - top,
-            isDragging: true,
-            currentDraggingElement: target,
+        if (isFormField && isRequired) {
+            this.validateField(target)
         }
     }
 
-    onPointerMove(event) {
-        if (!this.state.isDragging) {
-            return
+    onChange(event) {
+        const { target } = event
+        const isRequired = target.required
+        const isToggleType = ['radio', 'checkbox'].includes(target.type)
+
+        if (isToggleType && isRequired) {
+            this.validateField(target)
         }
-
-        const x = event.pageX - this.state.offsetX
-        const y = event.pageY - this.state.offsetY
-
-        this.state.currentDraggingElement.style.left = `${x}px`
-        this.state.currentDraggingElement.style.top = `${y}px`
     }
 
-    onPointerUp() {
-        if (!this.state.isDragging) {
+    onSubmit(event) {
+        const isFormElement = event.target.matches(this.selectors.form)
+        if (!isFormElement) {
             return
         }
 
-        this.state.currentDraggingElement.classList.remove(this.stateClasses.isDragging)
-        this.resetState()
+        const requiredControlElements = [...event.target.elements].filter(({ required }) => required)
+        let isFormValid = true
+        let firstInvalidFieldControl = null
+
+        requiredControlElements.forEach((element) => {
+            const isFieldValid = this.validateField(element)
+
+            if (!isFieldValid) {
+                isFormValid = false
+
+                if (!firstInvalidFieldControl) {
+                    firstInvalidFieldControl = element
+                }
+            }
+        })
+
+        if (!isFormValid) {
+            event.preventDefault()
+            firstInvalidFieldControl.focus()
+        }
     }
 
     bindEvents() {
-        document.addEventListener('pointerdown', (event) => this.onPointerDown(event))
-        document.addEventListener('pointermove', (event) => this.onPointerMove(event))
-        document.addEventListener('pointerup', () => this.onPointerUp())
+        document.addEventListener('blur', (event) => {
+            this.onBlur(event)
+        }, {capture: true})
+        document.addEventListener('change', (event) => this.onChange(event))
+        document.addEventListener('submit', (event) => this.onSubmit(event))
     }
 }
 
-new DragAndDrop()
+new FormsValidation()
